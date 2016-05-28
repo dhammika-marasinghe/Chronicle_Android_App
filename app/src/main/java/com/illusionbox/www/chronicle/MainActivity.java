@@ -1,6 +1,11 @@
 package com.illusionbox.www.chronicle;
 
+import android.animation.ObjectAnimator;
+import android.app.Dialog;
+import android.content.Context;
 import android.content.DialogInterface;
+import android.content.Intent;
+import android.media.Image;
 import android.media.MediaPlayer;
 import android.media.MediaRecorder;
 import android.os.AsyncTask;
@@ -11,88 +16,141 @@ import android.os.Bundle;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.Button;
 import android.widget.Chronometer;
+import android.widget.ImageButton;
+import android.widget.ProgressBar;
+import android.widget.TextView;
 import android.widget.Toast;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.File;
 import java.io.IOException;
+import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.HashMap;
 
 public class MainActivity extends AppCompatActivity {
 
-    Button play,stop,record,upload;
+    ImageButton record,upload;
     private MediaRecorder myAudioRecorder;
     private String outputFile = null;
     private Chronometer myChronometer;
     private MediaPlayer m;
+    private ProgressBar progressBar, recordProgress;
     HttpMultipartUpload uploader;
+    Context context;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        play=(Button)findViewById(R.id.btn_play);
-        stop=(Button)findViewById(R.id.btn_stop);
-        record=(Button)findViewById(R.id.btn_record);
-        upload = (Button) findViewById(R.id.btn_upload);
+        context = this;
+
+        record=(ImageButton)findViewById(R.id.btn_record);
+        upload = (ImageButton) findViewById(R.id.btn_upload);
         myChronometer = (Chronometer) findViewById(R.id.chronometer);
+        progressBar = (ProgressBar) findViewById(R.id.progressBar);
+        recordProgress = (ProgressBar) findViewById(R.id.progressBar2);
 
-        stop.setEnabled(false);
-        play.setEnabled(false);
-        outputFile = Environment.getExternalStorageDirectory().getAbsolutePath() + "/recording.3gp";;
+        upload.setEnabled(false);
+        upload.setAlpha(0.5f);
+        outputFile = Environment.getExternalStorageDirectory().getAbsolutePath() + "/recording.mp3";;
 
+        upload.setOnClickListener(upload_click);
         myAudioRecorder=new MediaRecorder();
         myAudioRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
-        myAudioRecorder.setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP);
-        myAudioRecorder.setAudioEncoder(MediaRecorder.OutputFormat.AMR_NB);
+        myAudioRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
+        myAudioRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
         myAudioRecorder.setOutputFile(outputFile);
 
-        record.setOnClickListener(new View.OnClickListener() {
+        myChronometer.setOnChronometerTickListener(new Chronometer.OnChronometerTickListener() {
             @Override
-            public void onClick(View v) {
-                try {
-                    myAudioRecorder.prepare();
-                    myAudioRecorder.start();
+            public void onChronometerTick(Chronometer chronometer) {
+                long timeElapsed = SystemClock.elapsedRealtime() - chronometer.getBase();
+                recordProgress.setProgress((int)timeElapsed/15);
+                if(timeElapsed >= 15000){
+                    myAudioRecorder.stop();
+                    myAudioRecorder.release();
+                    myAudioRecorder  = null;
+
+                    record.setImageDrawable(getResources().getDrawable(R.drawable.play_button));
+                    record.setOnClickListener(play_click);
+
+                    myChronometer.stop();
+
+                    upload.setEnabled(true);
+                    upload.setAlpha(1.0f);
+
+                    Toast.makeText(getApplicationContext(), "Audio recorded successfully",Toast.LENGTH_LONG).show();
                 }
-
-                catch (IllegalStateException e) {
-                    // TODO Auto-generated catch block
-                    e.printStackTrace();
-                }
-
-                catch (IOException e) {
-                    // TODO Auto-generated catch block
-                    e.printStackTrace();
-                }
-
-                record.setEnabled(false);
-                stop.setEnabled(true);
-                myChronometer.setBase(SystemClock.elapsedRealtime());
-                myChronometer.start();
-
-                Toast.makeText(getApplicationContext(), "Recording started", Toast.LENGTH_LONG).show();
             }
         });
 
-        stop.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                myAudioRecorder.stop();
-                myAudioRecorder.release();
-                myAudioRecorder  = null;
-
-                stop.setEnabled(false);
-                play.setEnabled(true);
-
-                myChronometer.stop();
-
-                Toast.makeText(getApplicationContext(), "Audio recorded successfully",Toast.LENGTH_LONG).show();
-            }
-        });
-
-        play.setOnClickListener(play_click);
+        record.setOnClickListener(record_click);
+        Button next = (Button) findViewById(R.id.next);
+        next.setOnClickListener(next_click);
     }
+
+    View.OnClickListener next_click = new View.OnClickListener() {
+        @Override
+        public void onClick(View view) {
+            Intent i = new Intent(MainActivity.this, PlaybackActivity.class);
+            startActivity(i);
+        }
+    };
+
+    View.OnClickListener record_click = new View.OnClickListener() {
+        @Override
+        public void onClick(View view) {
+
+            try {
+                myAudioRecorder.prepare();
+                myAudioRecorder.start();
+            }
+
+            catch (IllegalStateException e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+            }
+
+            catch (IOException e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+            }
+
+            record.setOnClickListener(stop_click);
+            record.setImageDrawable(getResources().getDrawable(R.drawable.red_button));
+
+            myChronometer.setBase(SystemClock.elapsedRealtime());
+            myChronometer.start();
+
+            Toast.makeText(getApplicationContext(), "Recording started", Toast.LENGTH_LONG).show();
+        }
+    };
+
+    View.OnClickListener stop_click = new View.OnClickListener() {
+        @Override
+        public void onClick(View v) {
+            myAudioRecorder.stop();
+            myAudioRecorder.release();
+            myAudioRecorder  = null;
+
+            record.setImageDrawable(getResources().getDrawable(R.drawable.play_button));
+            record.setOnClickListener(play_click);
+
+            myChronometer.stop();
+
+            upload.setEnabled(true);
+            upload.setAlpha(1.0f);
+
+            Toast.makeText(getApplicationContext(), "Audio recorded successfully",Toast.LENGTH_LONG).show();
+        }
+    };
 
     View.OnClickListener play_click = new View.OnClickListener() {
         @Override
@@ -116,15 +174,15 @@ public class MainActivity extends AppCompatActivity {
             myChronometer.setBase(SystemClock.elapsedRealtime() - m.getCurrentPosition());
             myChronometer.start();
 
-            play.setText("Pause");
-            play.setOnClickListener(pause_click);
+            record.setImageDrawable(getResources().getDrawable(R.drawable.pause_button));
+            record.setOnClickListener(pause_click);
 
             m.start();
             m.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
                 @Override
                 public void onCompletion(MediaPlayer mediaPlayer) {
-                    play.setText("Play");
-                    play.setOnClickListener(play_click);
+                    record.setImageDrawable(getResources().getDrawable(R.drawable.play_button));
+                    record.setOnClickListener(play_click);
                     myChronometer.stop();
                 }
             });
@@ -137,45 +195,63 @@ public class MainActivity extends AppCompatActivity {
         public void onClick(View view) {
             if(m.isPlaying()){
                 m.pause();
-                play.setText("Play");
-                play.setOnClickListener(play_click);
+                record.setImageDrawable(getResources().getDrawable(R.drawable.play_button));
+                record.setOnClickListener(play_click);
                 myChronometer.stop();
             } else {
                 m.stop();
-                play.setText("Play");
-                play.setOnClickListener(play_click);
+                record.setImageDrawable(getResources().getDrawable(R.drawable.play_button));
+                record.setOnClickListener(play_click);
                 myChronometer.stop();
             }
         }
     };
 
-    View.OnClickListener upload_click = new View.OnClickListener(){
-
+    View.OnClickListener upload_click = new View.OnClickListener() {
         @Override
         public void onClick(View view) {
-            uploader.upload(new URL("172.22.111.123/"));
+            new UploadAudioTask().execute("url", outputFile);
+            upload.setEnabled(false);
+            upload.setAlpha(0.5f);
         }
     };
 
-    private class UploadAudioTask extends AsyncTask<URL, Integer, Long> {
-        protected Long doInBackground(URL... urls) {
-            int count = urls.length;
-            long totalSize = 0;
-            for (int i = 0; i < count; i++) {
-                totalSize += Downloader.downloadFile(urls[i]);
-                publishProgress((int) ((i / (float) count) * 100));
-                // Escape early if cancel() is called
-                if (isCancelled()) break;
+    void setResponse(String str) {
+        TextView txt = (TextView)findViewById(R.id.textView);
+        txt.setText(str);
+    }
+
+    void setProgressPercent(int progress){
+        progressBar.setProgress(progress);
+    }
+
+    private class UploadAudioTask extends AsyncTask<String, Integer, String> {
+        protected String doInBackground(String... strings) {
+            publishProgress(25);
+            File file = new File(outputFile);
+            String result = "Failed";
+            try {
+                URL url = new URL("http://172.22.111.136:8080/chronicle-server/upload.php");
+                HashMap<String, String> map = new HashMap<>();
+                map.put("title","Kakki");
+                map.put("user","Pakaya");
+                result = new HttpMultipartUpload().upload(url, file, "uploadedFile", map);
+            } catch (MalformedURLException e) {
+                e.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
             }
-            return totalSize;
+            publishProgress(100);
+            return result;
         }
 
         protected void onProgressUpdate(Integer... progress) {
             setProgressPercent(progress[0]);
         }
 
-        protected void onPostExecute(Long result) {
-            showDialog("Downloaded " + result + " bytes");
+        protected void onPostExecute(String result) {
+            setResponse(result);
+            Toast.makeText(context, "Done "+result, Toast.LENGTH_LONG).show();
         }
     }
 }

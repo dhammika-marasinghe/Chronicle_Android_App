@@ -1,5 +1,7 @@
 package com.illusionbox.www.chronicle;
 
+import android.util.Log;
+
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -54,6 +56,7 @@ public class HttpMultipartUpload {
 
             // create a buffer of maximum size
             buffer = new byte[Math.min((int) file.length(), maxBufferSize)];
+            Log.e("Filesize", (int)file.length()+"");
             int length;
             // read file and write it into form...
             while ((length = fileInputStream.read(buffer)) != -1) {
